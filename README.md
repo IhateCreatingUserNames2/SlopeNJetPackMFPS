@@ -112,3 +112,6 @@ To start, use these values (balanced experience):
 * **uphillMomentumRetention**: 0.85
 
 Adjust to your preference! 🎿✨
+
+
+***   This was Vibed into existence By Claude. It contains Bugs and Issues. Use for exploration and education *** 
