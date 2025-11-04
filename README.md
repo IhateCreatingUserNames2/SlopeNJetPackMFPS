@@ -8,6 +8,10 @@
 
 
 
+https://github.com/user-attachments/assets/17d7ac64-a1da-4d0e-8982-5b01bf9a9756
+
+
+
 📊 Core Parameters
 
 <img width="424" height="572" alt="image" src="https://github.com/user-attachments/assets/1dbc6f0f-8747-4c3a-8482-67650401421e" />
