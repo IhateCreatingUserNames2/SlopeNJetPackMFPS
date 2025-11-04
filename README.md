@@ -4,11 +4,14 @@
 - Download SloopMovement.cs, SloopJetPack.cs , bl_FirstPersonController.cs 
 - Replace Original bl_FirstPersonController.cs 
 - Put Sloop scripts into a Folder named 'Sloop' inside Assets/ 
+- Add Sloop Scripts to your Character Game Object 
 
+
+
+📊 Core Parameters
 
 <img width="424" height="572" alt="image" src="https://github.com/user-attachments/assets/1dbc6f0f-8747-4c3a-8482-67650401421e" />
 
-📊 Core Parameters
 🏃 Base Speeds
 | Parameter | Recommended Value | Description |
 | :--- | :--- | :--- |
