@@ -6,24 +6,34 @@ public class SloopMovement : MonoBehaviour
     [Tooltip("Velocidade mínima para começar a esquiar.")]
     public float minSpeedToSki = 8f;
     [Tooltip("Velocidade máxima absoluta (0 = sem limite).")]
-    public float maxSpeed = 50f;
+    public float maxSpeed = 35f; // REDUZIDO de 50 para 35
     [Tooltip("Gravidade aplicada quando está no ar ou descendo.")]
-    public float gravity = 25f;
+    public float gravity = 18f; // REDUZIDO de 25 para 18
     [Tooltip("Fricção aplicada no chão plano.")]
-    public float groundFriction = 2f;
+    public float groundFriction = 4f; // AUMENTADO de 2 para 4
     [Tooltip("Fricção aplicada durante skiing (muito baixa).")]
-    public float skiFriction = 0.1f;
+    public float skiFriction = 0.3f; // AUMENTADO de 0.1 para 0.3
     [Tooltip("Controle do jogador no chão (WASD).")]
     public float groundControl = 25f;
     [Tooltip("Controle do jogador durante skiing (WASD).")]
-    public float skiControl = 15f;
+    public float skiControl = 20f; // AUMENTADO de 15 para 20
     [Tooltip("Controle do jogador no ar (WASD).")]
-    public float airControl = 0.8f;
+    public float airControl = 1.2f; // AUMENTADO de 0.8 para 1.2
     [Tooltip("Força para manter grudado no chão em alta velocidade.")]
-    public float groundStickForce = 15f;
+    public float groundStickForce = 20f; // AUMENTADO de 15 para 20
     [Tooltip("Quanto da velocidade é mantida ao subir rampas (0-1). 1 = sem perda.")]
     [Range(0f, 1f)]
-    public float uphillMomentumRetention = 0.85f;
+    public float uphillMomentumRetention = 0.75f; // REDUZIDO de 0.85 para 0.75
+
+    [Header("Skiing Balance")]
+    [Tooltip("Multiplicador de ganho de velocidade em descidas")]
+    [Range(0.1f, 2f)]
+    public float downhillSpeedGain = 0.6f; // NOVO - controla ganho em descidas
+    [Tooltip("Ângulo mínimo de rampa para ganhar velocidade")]
+    public float minSlopeAngleForBoost = 15f; // NOVO
+    [Tooltip("Fricção extra ao virar durante skiing")]
+    [Range(0f, 5f)]
+    public float turningFriction = 1.5f; // NOVO
 
     public bool IsSkiing { get; private set; } = false;
     public float CurrentSpeed { get; private set; } = 0f;
@@ -36,6 +46,7 @@ public class SloopMovement : MonoBehaviour
     private Vector3 velocity = Vector3.zero;
     private Vector3 groundNormal = Vector3.up;
     private bool wasGrounded = false;
+    private Vector3 lastMoveDirection = Vector3.zero;
 
     void Start()
     {
@@ -69,93 +80,124 @@ public class SloopMovement : MonoBehaviour
             {
                 // Pulo normal - APENAS velocidade vertical
                 velocity.y = m_controller.jumpSpeed;
-                // NÃO modifica velocidade horizontal (x e z)
             }
             else if (!jumpPressed && velocity.y < 0)
             {
-                // Aplica força para grudar no chão (evita "pular")
-                // Só aplica se NÃO está pulando
+                // Aplica força para grudar no chão
                 velocity.y = -groundStickForce;
             }
 
             // Calcula o ângulo da rampa
             float slopeAngle = Vector3.Angle(Vector3.up, groundNormal);
             bool isOnSlope = slopeAngle > 5f;
+
             if (IsSkiing)
             {
                 // ===== MODO SKIING (ALTA VELOCIDADE) =====
 
+                // NOVO: Aplica velocidade máxima durante skiing
+                if (maxSpeed > 0 && CurrentSpeed > maxSpeed)
+                {
+                    horizontalVelocity = horizontalVelocity.normalized * maxSpeed;
+                    velocity.x = horizontalVelocity.x;
+                    velocity.z = horizontalVelocity.z;
+                }
+
                 // Em rampas, adiciona ou remove velocidade baseado na inclinação
-                if (isOnSlope)
+                if (isOnSlope && slopeAngle > minSlopeAngleForBoost)
                 {
                     // Projeta a gravidade na direção da rampa
                     Vector3 slopeDirection = Vector3.ProjectOnPlane(Vector3.down, groundNormal).normalized;
-                    float slopeFactor = Mathf.Clamp01((slopeAngle - 5f) / 45f); // 0 a 1 baseado na inclinação
+                    float slopeFactor = Mathf.Clamp01((slopeAngle - minSlopeAngleForBoost) / 45f);
 
                     // Verifica se está descendo ou subindo
                     float verticalDirection = Vector3.Dot(velocity.normalized, Vector3.up);
 
                     if (verticalDirection < 0) // Descendo
                     {
-                        // GANHA velocidade descendo
-                        velocity += slopeDirection * gravity * slopeFactor * Time.deltaTime;
+                        // GANHA velocidade descendo (REDUZIDO com multiplicador)
+                        velocity += slopeDirection * gravity * slopeFactor * downhillSpeedGain * Time.deltaTime;
                     }
                     else // Subindo
                     {
-                        // PERDE velocidade subindo (mas retém momentum)
+                        // PERDE velocidade subindo
                         velocity += slopeDirection * gravity * slopeFactor * uphillMomentumRetention * Time.deltaTime;
                     }
                 }
 
-                // Fricção mínima durante skiing
-                velocity = Vector3.Lerp(velocity, new Vector3(velocity.x, velocity.y, velocity.z), skiFriction * Time.deltaTime);
-
-                // ===== CONTROLE DIRECIONAL APRIMORADO DURANTE SKIING =====
-                // WASD tem controle TOTAL da direção, independente do momentum
+                // NOVO: Fricção baseada em mudança de direção
                 if (input.magnitude > 0.1f)
                 {
-                    // Aplica força direcional forte
-                    velocity += inputDirection * skiControl * Time.deltaTime;
+                    float directionChange = Vector3.Angle(lastMoveDirection, inputDirection);
+                    float turnFriction = Mathf.Clamp01(directionChange / 90f) * turningFriction;
+                    velocity = Vector3.Lerp(velocity, velocity * (1f - turnFriction * Time.deltaTime), Time.deltaTime * 5f);
+                }
 
-                    // Se está tentando ir para trás (S), aplica freio adicional
+                // Fricção base durante skiing (AUMENTADA)
+                float effectiveSkiFriction = skiFriction;
+                // Aumenta fricção em terreno plano
+                if (!isOnSlope) effectiveSkiFriction *= 2f;
+
+                velocity.x = Mathf.Lerp(velocity.x, velocity.x * (1f - effectiveSkiFriction), Time.deltaTime);
+                velocity.z = Mathf.Lerp(velocity.z, velocity.z * (1f - effectiveSkiFriction), Time.deltaTime);
+
+                // ===== CONTROLE DIRECIONAL APRIMORADO =====
+                if (input.magnitude > 0.1f)
+                {
+                    // Força direcional (MELHORADA)
+                    Vector3 controlForce = inputDirection * skiControl * Time.deltaTime;
+
+                    // Reduz controle se estiver em velocidade muito alta
+                    float speedRatio = Mathf.Clamp01(CurrentSpeed / maxSpeed);
+                    controlForce *= Mathf.Lerp(1f, 0.6f, speedRatio);
+
+                    velocity += controlForce;
+
+                    // Freio ao pressionar S
                     if (input.y < -0.1f)
                     {
-                        // Freio: reduz velocidade frontal
                         Vector3 forwardVelocity = m_controller.transform.forward * Vector3.Dot(velocity, m_controller.transform.forward);
-                        velocity -= forwardVelocity * groundFriction * 0.5f * Time.deltaTime;
+                        velocity -= forwardVelocity * groundFriction * Time.deltaTime;
                     }
+
+                    lastMoveDirection = inputDirection;
                 }
             }
-       
-        else
-        {
-            // ===== MOVIMENTO NORMAL (BAIXA VELOCIDADE) =====
-
-            // Controle total com WASD
-            Vector3 targetVelocity = inputDirection * baseSpeed;
-
-            // Aplica fricção para alcançar a velocidade desejada rapidamente
-            velocity.x = Mathf.Lerp(velocity.x, targetVelocity.x, groundFriction * Time.deltaTime);
-            velocity.z = Mathf.Lerp(velocity.z, targetVelocity.z, groundFriction * Time.deltaTime);
-
-            // LIMITA a velocidade máxima no movimento normal
-            Vector3 horizontalVel = new Vector3(velocity.x, 0, velocity.z);
-            if (horizontalVel.magnitude > baseSpeed * 1.2f) // Máximo 20% acima da velocidade base
+            else
             {
-                horizontalVel = horizontalVel.normalized * baseSpeed * 1.2f;
-                velocity.x = horizontalVel.x;
-                velocity.z = horizontalVel.z;
+                // ===== MOVIMENTO NORMAL (BAIXA VELOCIDADE) =====
+                Vector3 targetVelocity = inputDirection * baseSpeed;
+
+                // Transição suave para velocidade desejada
+                velocity.x = Mathf.Lerp(velocity.x, targetVelocity.x, groundFriction * Time.deltaTime);
+                velocity.z = Mathf.Lerp(velocity.z, targetVelocity.z, groundFriction * Time.deltaTime);
+
+                // LIMITA a velocidade máxima no movimento normal
+                Vector3 horizontalVel = new Vector3(velocity.x, 0, velocity.z);
+                if (horizontalVel.magnitude > baseSpeed * 1.2f)
+                {
+                    horizontalVel = horizontalVel.normalized * baseSpeed * 1.2f;
+                    velocity.x = horizontalVel.x;
+                    velocity.z = horizontalVel.z;
+                }
             }
-        }
 
             wasGrounded = true;
         }
         else
         {
             // ===== NO AR =====
-
             IsSkiing = false;
-
+            if (maxSpeed > 0)
+            {
+                Vector3 totalVelocity = new Vector3(velocity.x, 0, velocity.z);
+                if (totalVelocity.magnitude > maxSpeed)
+                {
+                    totalVelocity = totalVelocity.normalized * maxSpeed;
+                    velocity.x = totalVelocity.x;
+                    velocity.z = totalVelocity.z;
+                }
+            }
             // Jetpack: adiciona força vertical
             if (m_jetpack != null && m_jetpack.IsActive)
             {
@@ -168,8 +210,7 @@ public class SloopMovement : MonoBehaviour
             }
 
             // ===== CONTROLE AÉREO APRIMORADO =====
-            // Mais controle logo após sair do chão, controle médio durante voo
-            float airControlMultiplier = wasGrounded ? airControl * 3f : airControl * 1.5f;
+            float airControlMultiplier = wasGrounded ? airControl * 2.5f : airControl * 1.8f;
 
             if (input.magnitude > 0.1f)
             {

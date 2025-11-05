@@ -4,7 +4,8 @@ using UnityEngine.UI;
 public class SloopJetpack : MonoBehaviour
 {
     [Header("Jetpack Settings")]
-    public float jetpackForce = 40f;
+    public float jetpackForce = 25f; // REDUZIDO de 40 para 25
+    public float maxVerticalSpeed = 12f; // NOVO - Limita velocidade vertical
     public KeyCode jetpackKey = KeyCode.Space;
 
     [Header("Fuel Settings")]
@@ -58,8 +59,21 @@ public class SloopJetpack : MonoBehaviour
             currentFuel -= fuelConsumeRate * Time.deltaTime;
             currentFuel = Mathf.Max(0, currentFuel);
 
-            // Retorna a força de aceleração
-            return Vector3.up * jetpackForce;
+            // NOVO: Verifica velocidade vertical atual
+            float currentVerticalSpeed = m_controller.Velocity.y;
+
+            // Se já está na velocidade máxima ou acima, não adiciona mais força
+            if (currentVerticalSpeed >= maxVerticalSpeed)
+            {
+                return Vector3.zero;
+            }
+
+            // Calcula força proporcional - quanto mais perto do limite, menor a força
+            float speedRatio = Mathf.Clamp01(currentVerticalSpeed / maxVerticalSpeed);
+            float adjustedForce = jetpackForce * (1f - speedRatio * 0.5f);
+
+            // Retorna a força de aceleração ajustada
+            return Vector3.up * adjustedForce;
         }
         return Vector3.zero;
     }
